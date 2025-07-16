@@ -1,0 +1,46 @@
+name: Deploy to DigitalOcean
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.8.0
+      with:
+        ssh-private-key: ${{ secrets.DO_SSH_KEY }}
+
+    - name: Deploy to DigitalOcean Droplet
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.DO_USER }}@${{ secrets.DO_HOST }} << 'EOF'
+          # Navigate to app directory
+          cd /opt/app || { echo "App directory not found"; exit 1; }
+          
+          # Pull latest changes
+          git pull origin main
+          
+          # Stop current containers
+          docker-compose down
+          
+          # Rebuild and start containers
+          docker-compose up --build -d
+          
+          # Clean up unused images
+          docker image prune -f
+          
+          echo "Deployment completed successfully!"
+        EOF
+
+    - name: Health Check
+      run: |
+        sleep 30
+        curl -f ${{ secrets.DOMAIN_URL }}/health || exit 1

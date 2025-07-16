@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: appdb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d appdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Backend
+  backend:
+    build: ./backend
+    container_name: fastapi_backend
+    environment:
+      - DATABASE_URL=postgresql://user:password@db:5432/appdb
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+    volumes:
+      # Mount source code only in development mode
+      - ${BACKEND_VOLUME_MOUNT:-./backend:/app}
+    command: >
+      sh -c "
+        if [ \"${DEV_MODE:-false}\" = \"true\" ]; then
+          echo 'Starting in DEVELOPMENT mode with hot reload...';
+          uvicorn main:app --host 0.0.0.0 --port 8000 --reload;
+        else
+          echo 'Starting in PRODUCTION mode...';
+          uvicorn main:app --host 0.0.0.0 --port 8000;
+        fi
+      "
+    restart: unless-stopped
+
+  # Next.js Frontend
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: ${FRONTEND_DOCKERFILE:-Dockerfile}
+    container_name: nextjs_frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NODE_ENV=${NODE_ENV:-production}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    volumes:
+      # Mount source code and preserve node_modules only in development
+      - ${FRONTEND_VOLUME_MOUNT:-/app/placeholder}
+      - ${NODE_MODULES_VOLUME:-/app/node_modules_placeholder}
+      - ${NEXT_VOLUME:-/app/.next_placeholder}
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  app-network:
+    driver: bridge
