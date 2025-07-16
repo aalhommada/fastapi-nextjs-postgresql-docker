@@ -52,6 +52,9 @@ services:
     networks:
       - app-network
     restart: unless-stopped
+    # Add memory limit to prevent OOM on small droplets
+    mem_limit: 256m
+    memswap_limit: 512m
 
 volumes:
   postgres_data:

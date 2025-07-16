@@ -1,3 +1,4 @@
+# Use Node.js 18 Alpine
 FROM node:18-alpine
 
 WORKDIR /app
@@ -5,8 +6,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies 
-RUN npm ci --omit=dev
+# Install ALL dependencies (we need dev dependencies for building)
+RUN npm ci
 
 # Copy source code
 COPY . .

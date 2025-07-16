@@ -5,6 +5,16 @@ DROPLET_IP="165.232.86.188"
 
 echo "🚀 Deploying FastAPI + Next.js + PostgreSQL on DigitalOcean Droplet: $DROPLET_IP"
 
+# Check if swap exists, if not create it for low-memory builds
+if ! swapon --show | grep -q "/swapfile"; then
+    echo "💾 Creating swap space for memory-intensive builds..."
+    fallocate -l 1G /swapfile
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+    echo "✅ Swap space created"
+fi
+
 # Update the API URL in docker-compose.simple.yml
 sed -i "s/DROPLET_IP_PLACEHOLDER/$DROPLET_IP/g" docker-compose.simple.yml
 
@@ -14,9 +24,9 @@ echo "✅ Updated docker-compose.simple.yml with IP: $DROPLET_IP"
 echo "🛑 Stopping existing containers..."
 docker-compose -f docker-compose.simple.yml down
 
-# Remove old images
+# Remove old images to free up space
 echo "🧹 Cleaning up old images..."
-docker-compose -f docker-compose.simple.yml down --rmi all
+docker system prune -f
 
 # Build and start all services
 echo "🔨 Building and starting services..."
