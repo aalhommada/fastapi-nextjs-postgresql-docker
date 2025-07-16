@@ -1,18 +1,43 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from pydantic import BaseModel
 from datetime import datetime
 import os
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # Database configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:secure_password_123@db:5432/appdb")
-engine = create_engine(DATABASE_URL)
+
+def create_database_engine():
+    """Create database engine with retry logic"""
+    max_retries = 30
+    retry_delay = 2
+    
+    for attempt in range(max_retries):
+        try:
+            engine = create_engine(DATABASE_URL)
+            # Test the connection
+            with engine.connect() as connection:
+                connection.execute(text("SELECT 1"))
+            print(f"✅ Database connection successful on attempt {attempt + 1}")
+            return engine
+        except Exception as e:
+            if attempt < max_retries - 1:
+                print(f"❌ Database connection failed (attempt {attempt + 1}/{max_retries}): {e}")
+                print(f"⏳ Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+            else:
+                print(f"💥 Database connection failed after {max_retries} attempts")
+                raise e
+
+# Create engine with retries
+engine = create_database_engine()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -39,8 +64,24 @@ class User(BaseModel):
     class Config:
         from_attributes = True
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+# Create tables with retry logic
+def create_tables():
+    """Create database tables with retry logic"""
+    max_retries = 5
+    for attempt in range(max_retries):
+        try:
+            Base.metadata.create_all(bind=engine)
+            print("✅ Database tables created successfully")
+            break
+        except Exception as e:
+            if attempt < max_retries - 1:
+                print(f"❌ Failed to create tables (attempt {attempt + 1}/{max_retries}): {e}")
+                time.sleep(2)
+            else:
+                print(f"💥 Failed to create tables after {max_retries} attempts")
+                raise e
+
+create_tables()
 
 # FastAPI app
 app = FastAPI(title="Simple API", version="1.0.0")
@@ -68,8 +109,22 @@ async def root():
     return {"message": "Hello from FastAPI Backend!", "status": "working"}
 
 @app.get("/health")
-async def health_check():
-    return {"status": "healthy", "timestamp": datetime.utcnow()}
+async def health_check(db: Session = Depends(get_db)):
+    try:
+        # Test database connectivity
+        db.execute(text("SELECT 1"))
+        return {
+            "status": "healthy", 
+            "timestamp": datetime.utcnow(),
+            "database": "connected"
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy", 
+            "timestamp": datetime.utcnow(),
+            "database": "disconnected",
+            "error": str(e)
+        }
 
 @app.post("/users/", response_model=User)
 async def create_user(user: UserCreate, db: Session = Depends(get_db)):

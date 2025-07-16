@@ -21,12 +21,13 @@ services:
       retries: 5
       start_period: 30s
 
-  # FastAPI Backend - Simple Configuration
+  # FastAPI Backend
   backend:
     build: ./backend
     container_name: fastapi_backend
     environment:
       - DATABASE_URL=postgresql://user:secure_password_123@db:5432/appdb
+      - ENVIRONMENT=production
     ports:
       - "8000:8000"
     depends_on:
@@ -47,7 +48,8 @@ services:
     build: ./frontend
     container_name: nextjs_frontend
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=http://165.232.86.188:8000
+      - NODE_ENV=production
     ports:
       - "3000:3000"
     depends_on:

@@ -1,95 +1,78 @@
-name: Auto-Deploy to DigitalOcean
+name: Deploy to DigitalOcean
 
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
-
-env:
-  DROPLET_IP: 165.232.86.188
-  APP_PATH: /opt/app/fastapi-nextjs-postgresql-docker
+  pull_request:
+    branches: [ main ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Deploy to DigitalOcean Droplet
-      uses: appleboy/ssh-action@v1.0.3
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
       with:
-        host: ${{ env.DROPLET_IP }}
-        username: root
-        password: ${{ secrets.DROPLET_PASSWORD }}
-        script: |
-          set -e  # Exit on any error
+        ssh-private-key: ${{ secrets.DIGITALOCEAN_SSH_KEY }}
+
+    - name: Add server to known hosts
+      run: |
+        ssh-keyscan -H ${{ secrets.DROPLET_IP }} >> ~/.ssh/known_hosts
+
+    - name: Deploy to DigitalOcean
+      run: |
+        ssh -o StrictHostKeyChecking=no root@${{ secrets.DROPLET_IP }} << 'EOF'
+          # Navigate to the project directory
+          cd /root/fastapi-nextjs-postgresql-docker || {
+            echo "Project directory not found. Cloning repository..."
+            git clone https://github.com/aalhommada/fastapi-nextjs-postgresql-docker.git
+            cd /root/fastapi-nextjs-postgresql-docker
+          }
           
-          echo "🚀 Starting deployment..."
+          # Pull latest changes
+          echo "Pulling latest changes..."
+          git fetch origin
+          git reset --hard origin/main
           
-          # Navigate to app directory
-          cd ${{ env.APP_PATH }}
+          # Stop existing containers (gracefully)
+          echo "Stopping existing containers..."
+          docker-compose -f docker-compose.prod.yml down --remove-orphans || true
           
-          # Pull latest changes from GitHub
-          echo "📥 Pulling latest changes..."
-          git pull origin main
+          # Clean up unused Docker resources
+          echo "Cleaning up Docker resources..."
+          docker system prune -f
           
-          # Stop existing containers gracefully
-          echo "🛑 Stopping existing containers..."
-          docker-compose down --timeout 30
+          # Build and start containers with production config
+          echo "Building and starting containers..."
+          docker-compose -f docker-compose.prod.yml up --build -d
           
-          # Clean up old images and containers
-          echo "🧹 Cleaning up old images..."
-          docker system prune -f --volumes
+          # Wait for services to be ready
+          echo "Waiting for services to start..."
+          sleep 30
           
-          # Build new images
-          echo "🔨 Building new images..."
-          docker-compose build --no-cache --parallel
+          # Check if services are running
+          echo "Checking service status..."
+          docker-compose -f docker-compose.prod.yml ps
           
-          # Start services
-          echo "🚀 Starting services..."
-          docker-compose up -d
+          # Test the application
+          echo "Testing application endpoints..."
+          curl -f http://localhost:8000/health || echo "Backend health check failed"
+          curl -f http://localhost:3000 || echo "Frontend check failed"
           
-          # Wait for services to be healthy
-          echo "⏳ Waiting for services to be ready..."
-          timeout=300  # 5 minutes
-          elapsed=0
-          
-          while [ $elapsed -lt $timeout ]; do
-            if docker-compose ps | grep -q "healthy"; then
-              echo "✅ Services are healthy!"
-              break
-            fi
-            sleep 10
-            elapsed=$((elapsed + 10))
-            echo "⏳ Waiting... (${elapsed}s)"
-          done
-          
-          if [ $elapsed -ge $timeout ]; then
-            echo "❌ Services failed to become healthy within timeout"
-            docker-compose logs
-            exit 1
-          fi
-          
-          # Final status check
-          echo "📊 Final status check..."
-          docker-compose ps
-          
-          # Test endpoints
-          echo "🔍 Testing endpoints..."
-          sleep 5
-          
-          if curl -f http://localhost:8000/health > /dev/null 2>&1; then
-            echo "✅ Health check passed"
-          else
-            echo "❌ Health check failed"
-            docker-compose logs backend
-            exit 1
-          fi
-          
-          echo ""
-          echo "🎉 Deployment completed successfully!"
-          echo "🔗 Backend API: http://${{ env.DROPLET_IP }}:8000"
-          echo "📋 API Docs: http://${{ env.DROPLET_IP }}:8000/docs"
-          echo "🕐 Deployment time: $(date)"
-          
-          # Clean up old images after successful deployment
-          docker image prune -f
+          echo "Deployment completed successfully!"
+        EOF
+
+    - name: Verify deployment
+      run: |
+        echo "Waiting for deployment to stabilize..."
+        sleep 10
+        
+        # Test the live application
+        curl -f http://${{ secrets.DROPLET_IP }}:8000/health || echo "Remote backend health check failed"
+        curl -f http://${{ secrets.DROPLET_IP }}:3000 || echo "Remote frontend check failed"
+        
+        echo "Deployment verification completed!"
