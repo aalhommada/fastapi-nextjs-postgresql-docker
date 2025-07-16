@@ -1,66 +1,95 @@
-name: Zero-Downtime Deploy to DigitalOcean
+name: Auto-Deploy to DigitalOcean
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
+env:
+  DROPLET_IP: 165.232.86.188
+  APP_PATH: /opt/app/fastapi-nextjs-postgresql-docker
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Zero-Downtime Deploy to DigitalOcean Droplet
-      uses: appleboy/ssh-action@v1.0.0
+    - name: Deploy to DigitalOcean Droplet
+      uses: appleboy/ssh-action@v1.0.3
       with:
-        host: 165.232.86.188
+        host: ${{ env.DROPLET_IP }}
         username: root
         password: ${{ secrets.DROPLET_PASSWORD }}
         script: |
+          set -e  # Exit on any error
+          
+          echo "🚀 Starting deployment..."
+          
           # Navigate to app directory
-          cd /opt/app/fastapi-nextjs-postgresql-docker
+          cd ${{ env.APP_PATH }}
           
           # Pull latest changes from GitHub
-          echo "🔄 Pulling latest changes..."
+          echo "📥 Pulling latest changes..."
           git pull origin main
           
-          # Zero-downtime deployment strategy
-          echo "� Starting zero-downtime deployment..."
+          # Stop existing containers gracefully
+          echo "🛑 Stopping existing containers..."
+          docker-compose down --timeout 30
           
-          # Build new images without stopping services
+          # Clean up old images and containers
+          echo "🧹 Cleaning up old images..."
+          docker system prune -f --volumes
+          
+          # Build new images
           echo "🔨 Building new images..."
-          docker-compose build --no-cache
+          docker-compose build --no-cache --parallel
           
-          # Scale up with new version (creates new containers alongside old ones)
-          echo "� Scaling up with new version..."
-          docker-compose up -d --scale backend=2 --no-recreate
+          # Start services
+          echo "🚀 Starting services..."
+          docker-compose up -d
           
-          # Wait for new containers to be healthy
-          echo "⏳ Waiting for new containers to be healthy..."
-          sleep 30
+          # Wait for services to be healthy
+          echo "⏳ Waiting for services to be ready..."
+          timeout=300  # 5 minutes
+          elapsed=0
           
-          # Check if new containers are healthy
-          if docker-compose ps | grep -q "healthy"; then
-            echo "✅ New containers are healthy"
-            
-            # Remove old containers (keeps newest ones)
-            echo "🔄 Removing old containers..."
-            docker-compose up -d --scale backend=1 --remove-orphans
-            
-            # Clean up old images
-            echo "🧹 Cleaning up old images..."
-            docker image prune -f
-            
-            echo "🎉 Zero-downtime deployment completed successfully!"
-          else
-            echo "❌ New containers are not healthy, rolling back..."
-            docker-compose down
-            docker-compose up -d
+          while [ $elapsed -lt $timeout ]; do
+            if docker-compose ps | grep -q "healthy"; then
+              echo "✅ Services are healthy!"
+              break
+            fi
+            sleep 10
+            elapsed=$((elapsed + 10))
+            echo "⏳ Waiting... (${elapsed}s)"
+          done
+          
+          if [ $elapsed -ge $timeout ]; then
+            echo "❌ Services failed to become healthy within timeout"
+            docker-compose logs
+            exit 1
           fi
           
           # Final status check
           echo "📊 Final status check..."
           docker-compose ps
           
-          echo "🔗 API available at: http://165.232.86.188:8000"
-          echo "📋 API docs: http://165.232.86.188:8000/docs"
+          # Test endpoints
+          echo "🔍 Testing endpoints..."
+          sleep 5
+          
+          if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+            echo "✅ Health check passed"
+          else
+            echo "❌ Health check failed"
+            docker-compose logs backend
+            exit 1
+          fi
+          
+          echo ""
+          echo "🎉 Deployment completed successfully!"
+          echo "🔗 Backend API: http://${{ env.DROPLET_IP }}:8000"
+          echo "📋 API Docs: http://${{ env.DROPLET_IP }}:8000/docs"
+          echo "🕐 Deployment time: $(date)"
+          
+          # Clean up old images after successful deployment
+          docker image prune -f
