@@ -1,0 +1,22 @@
+# Minimal frontend build for low-memory environments
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install only production dependencies
+ENV NODE_ENV=production
+RUN npm ci --only=production
+
+# Copy pre-built files (we'll build locally and copy)
+COPY . .
+
+# Create a simple start script for development mode
+RUN echo '#!/bin/sh\nexec npm run dev' > start.sh && chmod +x start.sh
+
+EXPOSE 3000
+
+# Use development mode to avoid build step
+CMD ["npm", "run", "dev"]
