@@ -1,0 +1,48 @@
+name: Auto Deploy to DigitalOcean
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Deploy to DigitalOcean Droplet
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: 165.232.86.188
+        username: root
+        password: ${{ secrets.DROPLET_PASSWORD }}
+        script: |
+          # Navigate to app directory
+          cd /opt/app/fastapi-nextjs-postgresql-docker
+          
+          # Pull latest changes from GitHub
+          echo "🔄 Pulling latest changes..."
+          git pull origin main
+          
+          # Stop current containers
+          echo "🛑 Stopping containers..."
+          docker-compose down
+          
+          # Clean up old images to free space
+          echo "🧹 Cleaning up..."
+          docker system prune -f
+          
+          # Build and start new containers
+          echo "🔨 Building and starting services..."
+          docker-compose up --build -d
+          
+          # Wait for services to be ready
+          echo "⏳ Waiting for services..."
+          sleep 20
+          
+          # Check status
+          echo "📊 Checking status..."
+          docker-compose ps
+          
+          echo "🎉 Auto-deployment completed successfully!"
+          echo "🔗 API available at: http://165.232.86.188:8000"
