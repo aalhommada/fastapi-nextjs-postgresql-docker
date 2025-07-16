@@ -1,13 +1,60 @@
-# FastAPI + Next.js 15+ + PostgreSQL Docker App
+# FastAPI + Next.js + PostgreSQL Docker Deployment
 
-A modern full-stack application with FastAPI backend, Next.js 15+ frontend using App Router, and PostgreSQL database, all containerized with Docker.
+## Quick Deploy on DigitalOcean Droplet
 
-## Features
+### 1. Clone and Deploy
+```bash
+git clone https://github.com/aalhommada/fastapi-nextjs-postgresql-docker.git
+cd fastapi-nextjs-postgresql-docker
+chmod +x deploy-simple.sh
+./deploy-simple.sh
+```
 
-- **Backend**: FastAPI with SQLAlchemy ORM
-- **Frontend**: Next.js 15+ with App Router and TypeScript
-- **Database**: PostgreSQL
-- **Containerization**: Docker & Docker Compose
+### 2. Access Your App
+- **Frontend**: http://165.232.86.188:3000
+- **Backend API**: http://165.232.86.188:8000
+- **API Documentation**: http://165.232.86.188:8000/docs
+
+### 3. Project Structure
+```
+├── backend/           # FastAPI application
+├── frontend/          # Next.js 15+ App Router
+├── docker-compose.simple.yml  # Simple deployment config
+├── deploy-simple.sh   # One-command deployment
+└── README.md         # This file
+```
+
+### 4. Services
+- **PostgreSQL**: Database on port 5432
+- **FastAPI**: Backend API on port 8000
+- **Next.js**: Frontend on port 3000
+
+### 5. Environment
+- **Database**: PostgreSQL 15
+- **Backend**: FastAPI with SQLAlchemy
+- **Frontend**: Next.js 15+ with App Router
+- **Container**: Docker & Docker Compose
+
+### 6. Commands
+```bash
+# View logs
+docker-compose -f docker-compose.simple.yml logs
+
+# Stop services
+docker-compose -f docker-compose.simple.yml down
+
+# Restart services
+./deploy-simple.sh
+```
+
+### 7. Development
+```bash
+# For local development
+docker-compose up --build
+```
+
+---
+**Ready to deploy in one command!** 🚀
 - **Local Development**: Hot reloading for both frontend and backend
 - **Modern Architecture**: Uses Next.js App Router for better performance and developer experience
 
