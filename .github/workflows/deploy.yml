@@ -1,27 +1,26 @@
 name: Deploy to DigitalOcean
 
-# Temporarily disabled to avoid SSH key errors
-# on:
-#   push:
-#     branches: [ main ]
-#   workflow_dispatch:
-
-# Manual deployment only for now
+# Completely disabled to avoid SSH key errors
+# This workflow is disabled until SSH keys are properly configured
 on:
   workflow_dispatch:
+    inputs:
+      skip_deployment:
+        description: 'Skip deployment (workflow disabled)'
+        required: false
+        default: 'true'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: false  # This completely disables the job
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup SSH
-      uses: webfactory/ssh-agent@v0.8.0
-      with:
-        ssh-private-key: ${{ secrets.DO_SSH_KEY }}
+    - name: Disabled
+      run: |
+        echo "This workflow is temporarily disabled"
+        echo "Manual deployment required on droplet"
+        exit 0
 
     - name: Deploy to DigitalOcean Droplet
       run: |
