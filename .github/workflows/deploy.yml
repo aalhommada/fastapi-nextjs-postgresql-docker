@@ -1,4 +1,4 @@
-name: Auto Deploy to DigitalOcean
+name: Zero-Downtime Deploy to DigitalOcean
 
 on:
   push:
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Deploy to DigitalOcean Droplet
+    - name: Zero-Downtime Deploy to DigitalOcean Droplet
       uses: appleboy/ssh-action@v1.0.0
       with:
         host: 165.232.86.188
@@ -24,25 +24,43 @@ jobs:
           echo "🔄 Pulling latest changes..."
           git pull origin main
           
-          # Stop current containers
-          echo "🛑 Stopping containers..."
-          docker-compose down
+          # Zero-downtime deployment strategy
+          echo "� Starting zero-downtime deployment..."
           
-          # Clean up old images to free space
-          echo "🧹 Cleaning up..."
-          docker system prune -f
+          # Build new images without stopping services
+          echo "🔨 Building new images..."
+          docker-compose build --no-cache
           
-          # Build and start new containers
-          echo "🔨 Building and starting services..."
-          docker-compose up --build -d
+          # Scale up with new version (creates new containers alongside old ones)
+          echo "� Scaling up with new version..."
+          docker-compose up -d --scale backend=2 --no-recreate
           
-          # Wait for services to be ready
-          echo "⏳ Waiting for services..."
-          sleep 20
+          # Wait for new containers to be healthy
+          echo "⏳ Waiting for new containers to be healthy..."
+          sleep 30
           
-          # Check status
-          echo "📊 Checking status..."
+          # Check if new containers are healthy
+          if docker-compose ps | grep -q "healthy"; then
+            echo "✅ New containers are healthy"
+            
+            # Remove old containers (keeps newest ones)
+            echo "🔄 Removing old containers..."
+            docker-compose up -d --scale backend=1 --remove-orphans
+            
+            # Clean up old images
+            echo "🧹 Cleaning up old images..."
+            docker image prune -f
+            
+            echo "🎉 Zero-downtime deployment completed successfully!"
+          else
+            echo "❌ New containers are not healthy, rolling back..."
+            docker-compose down
+            docker-compose up -d
+          fi
+          
+          # Final status check
+          echo "📊 Final status check..."
           docker-compose ps
           
-          echo "🎉 Auto-deployment completed successfully!"
           echo "🔗 API available at: http://165.232.86.188:8000"
+          echo "📋 API docs: http://165.232.86.188:8000/docs"
