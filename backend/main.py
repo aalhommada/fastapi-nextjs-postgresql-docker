@@ -48,7 +48,7 @@ app = FastAPI(title="Simple API", version="1.0.0")
 # CORS middleware - allow frontend to connect
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Next.js frontend
+    allow_origins=["http://localhost:3000", "https://aalhommada.com", "https://www.aalhommada.com"],  # Frontend URLs
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
